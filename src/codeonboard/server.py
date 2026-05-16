@@ -67,6 +67,23 @@ async def ask_codebase(repo_url: str, question: str) -> dict:
     """
     return await ask_codebase_tool(repo_url, question)
 
+@mcp.tool()
+async def check_config() -> dict:
+    """
+    Check if all required credentials are configured.
+    
+    Returns:
+        Dictionary showing which credentials are set and their values
+    """
+    from .config import WATSONX_API_KEY, WATSONX_PROJECT_ID, WATSONX_URL, GITHUB_TOKEN, WATSONX_MODEL_ID
+    return {
+        "github_token_set": bool(GITHUB_TOKEN),
+        "watsonx_api_key_set": bool(WATSONX_API_KEY),
+        "watsonx_project_id_set": bool(WATSONX_PROJECT_ID),
+        "watsonx_url": WATSONX_URL,
+        "watsonx_model": WATSONX_MODEL_ID
+    }
+
 
 def run():
     """
