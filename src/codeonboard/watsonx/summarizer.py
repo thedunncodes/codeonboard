@@ -29,7 +29,7 @@ async def summarize_context(context_string: str) -> str:
         RuntimeError: If summarization fails for any reason
     """
     try:
-        from ibm_watsonx_ai import ModelInference
+        from ibm_watsonx_ai.foundation_models import ModelInference
     except ImportError as e:
         raise RuntimeError(f"WatsonX library not available: {str(e)}")
     
@@ -55,10 +55,13 @@ SUMMARY:"""
         loop = asyncio.get_event_loop()
         summary = await loop.run_in_executor(
             None,
-            lambda: model.generate_text(prompt=prompt, params={"max_new_tokens": WATSONX_MAX_TOKENS})
+            lambda: model.chat(
+                messages=[{"role": "user", "content": prompt}],
+                params={"max_new_tokens": WATSONX_MAX_TOKENS}
+            )
         )
-        
-        return summary
+
+        return summary["choices"][0]["message"]["content"]
     
     except Exception as e:
         raise RuntimeError(f"Failed to summarize context with WatsonX: {str(e)}")

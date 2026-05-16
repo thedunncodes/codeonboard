@@ -97,7 +97,7 @@ async def _call_watsonx(prompt: str) -> str:
         Generated guide markdown string, or error string starting with "ERROR:"
     """
     try:
-        from ibm_watsonx_ai import ModelInference
+        from ibm_watsonx_ai.foundation_models import ModelInference
         from ..config import (
             WATSONX_API_KEY,
             WATSONX_PROJECT_ID,
@@ -120,10 +120,13 @@ async def _call_watsonx(prompt: str) -> str:
         loop = asyncio.get_event_loop()
         generated_text = await loop.run_in_executor(
             None,
-            lambda: model.generate_text(prompt=prompt, params={"max_new_tokens": WATSONX_MAX_TOKENS})
+            lambda: model.chat(
+                messages=[{"role": "user", "content": prompt}],
+                params={"max_new_tokens": WATSONX_MAX_TOKENS}
+            )
         )
-        
-        return generated_text
+
+        return generated_text["choices"][0]["message"]["content"]
     
     except Exception as e:
         return f"ERROR: Failed to generate guide with WatsonX: {str(e)}"
