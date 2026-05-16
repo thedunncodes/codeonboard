@@ -2,6 +2,7 @@
 MCP tool for generating onboarding guides from repository analysis.
 """
 
+import asyncio
 from .fetch_repo import fetch_repo_tool
 from ..storage.context_store import ContextStore
 from ..utils.validators import validate_repo_url, parse_github_url
@@ -12,6 +13,179 @@ try:
     WATSONX_AVAILABLE = True
 except Exception:
     WATSONX_AVAILABLE = False
+
+
+def _build_guide_prompt(repo_name: str, context_string: str, tech_stack: dict) -> str:
+    """
+    Build the prompt for WatsonX to generate the onboarding guide.
+    
+    Args:
+        repo_name: Name of the repository
+        context_string: Full context string with code snippets
+        tech_stack: Tech stack analysis dictionary
+    
+    Returns:
+        Formatted prompt string for LLM
+    """
+    frameworks = tech_stack.get("frameworks", {})
+    framework_str = ", ".join([
+        item for sublist in frameworks.values() for item in sublist
+    ]) or "None detected"
+
+    return f"""You are an expert software architect creating a developer onboarding guide.
+Analyze the repository code provided and generate a comprehensive onboarding guide.
+Be SPECIFIC — reference actual file names, function names, and line numbers from the code.
+Never give generic advice. If you cannot find something in the code, say so honestly.
+
+REPOSITORY: {repo_name}
+PRIMARY LANGUAGE: {tech_stack.get('primary_language', 'Unknown')}
+FRAMEWORKS: {framework_str}
+HAS TESTS: {tech_stack.get('has_tests', False)}
+HAS DOCKER: {tech_stack.get('has_docker', False)}
+HAS CI: {tech_stack.get('has_ci', False)}
+ARCHITECTURE: {tech_stack.get('architecture', 'standard')}
+
+CODEBASE:
+{context_string}
+
+Generate a developer onboarding guide with EXACTLY these sections in this order.
+Use the actual code above — do not make anything up:
+
+## Project Overview
+What this project does in 2-3 sentences. What problem it solves. Who uses it.
+
+## Tech Stack
+List every technology detected with a one-line explanation of its role in THIS project.
+
+## Architecture
+Explain how the system is structured in 3-4 sentences referencing actual folders and files.
+Then provide a Mermaid diagram showing the main components and how they connect.
+Format the diagram as:
+```mermaid
+graph TD
+    ...
+```
+
+## Key Modules
+For each major folder or module: name, file path, what it does, and its 2-3 most important files.
+
+## Getting Started
+Exact commands to clone, install dependencies and run the project locally.
+List prerequisites. Include any gotchas or non-obvious steps you can see from the code.
+
+## Entry Points
+Where does the application start? List the main entry files with their exact paths and what happens when they run.
+
+## First Week Tasks
+List 3 specific tasks a new developer should do in their first week.
+Each task must reference actual files they will touch and explain why it is a good starting task.
+
+## Glossary
+List project-specific terms, abbreviations, or patterns used in this codebase that a new developer needs to know.
+
+Be specific. Be direct. Reference real file paths. Do not pad with generic advice."""
+
+
+async def _call_watsonx(prompt: str) -> str:
+    """
+    Call WatsonX to generate guide content.
+    
+    Args:
+        prompt: The formatted prompt for guide generation
+    
+    Returns:
+        Generated guide markdown string, or error string starting with "ERROR:"
+    """
+    try:
+        from ibm_watsonx_ai import ModelInference
+        from ..config import (
+            WATSONX_API_KEY,
+            WATSONX_PROJECT_ID,
+            WATSONX_URL,
+            WATSONX_MODEL_ID,
+            WATSONX_MAX_TOKENS
+        )
+    except ImportError as e:
+        return f"ERROR: WatsonX library not available: {str(e)}"
+    
+    try:
+        # Create model instance
+        model = ModelInference(
+            model_id=WATSONX_MODEL_ID,
+            credentials={"apikey": WATSONX_API_KEY, "url": WATSONX_URL},
+            project_id=WATSONX_PROJECT_ID
+        )
+        
+        # Run synchronous generate_text in executor to avoid blocking
+        loop = asyncio.get_event_loop()
+        generated_text = await loop.run_in_executor(
+            None,
+            lambda: model.generate_text(prompt=prompt, params={"max_new_tokens": WATSONX_MAX_TOKENS})
+        )
+        
+        return generated_text
+    
+    except Exception as e:
+        return f"ERROR: Failed to generate guide with WatsonX: {str(e)}"
+
+
+def _build_fallback_guide(repo_name: str, repo_url: str, tech_stack: dict) -> str:
+    """
+    Build a fallback guide using structured template when WatsonX is unavailable.
+    
+    Args:
+        repo_name: Name of the repository
+        repo_url: Full repository URL
+        tech_stack: Tech stack analysis dictionary
+    
+    Returns:
+        Structured markdown guide template
+    """
+    return f"""# {repo_name} - Developer Onboarding Guide
+
+## Project Overview
+*AI generation unavailable — configure WATSONX_API_KEY for full AI-generated content.*
+
+## Tech Stack
+**Primary Language:** {tech_stack.get('primary_language', 'Unknown')}
+
+**All Languages:** {', '.join(tech_stack.get('all_languages', []))}
+
+**Frameworks:**
+{_format_frameworks(tech_stack.get('frameworks', {}))}
+
+**Dependencies:**
+{_format_dependencies(tech_stack.get('dependencies', {}))}
+
+## Architecture
+*AI generation unavailable — configure WATSONX_API_KEY for full AI-generated content.*
+
+{_generate_architecture_diagram()}
+
+## Key Modules
+*AI generation unavailable — configure WATSONX_API_KEY for full AI-generated content.*
+
+## Getting Started
+*AI generation unavailable — configure WATSONX_API_KEY for full AI-generated content.*
+
+## Entry Points
+*AI generation unavailable — configure WATSONX_API_KEY for full AI-generated content.*
+
+## First Week Tasks
+*AI generation unavailable — configure WATSONX_API_KEY for full AI-generated content.*
+
+## Glossary
+*AI generation unavailable — configure WATSONX_API_KEY for full AI-generated content.*
+
+---
+*Generated by CodeOnboard MCP Server*
+*Repository: {repo_url}*
+*Total Files Analyzed: {tech_stack.get('total_files', 0)}*
+*Has Tests: {'Yes' if tech_stack.get('has_tests') else 'No'}*
+*Has Docker: {'Yes' if tech_stack.get('has_docker') else 'No'}*
+*Has CI/CD: {'Yes' if tech_stack.get('has_ci') else 'No'}*
+*Architecture: {tech_stack.get('architecture', 'standard').title()}*
+"""
 
 
 async def generate_guide_tool(repo_url: str, include_diagrams: bool = True) -> dict:
@@ -82,52 +256,13 @@ async def generate_guide_tool(repo_url: str, include_diagrams: bool = True) -> d
                 # Silently fall back to original context if summarization fails
                 pass
         
-        # TODO: Implement actual LLM prompt for guide generation
-        # For now, return a placeholder
-        guide_markdown = f"""# {repo_name} - Developer Onboarding Guide
-
-## Project Overview
-TODO: Generate project overview using LLM with context
-
-## Tech Stack
-**Primary Language:** {tech_stack.get('primary_language', 'Unknown')}
-
-**All Languages:** {', '.join(tech_stack.get('all_languages', []))}
-
-**Frameworks:**
-{_format_frameworks(tech_stack.get('frameworks', {}))}
-
-**Dependencies:**
-{_format_dependencies(tech_stack.get('dependencies', {}))}
-
-## Architecture
-TODO: Generate architecture description using LLM with context
-{_generate_architecture_diagram() if include_diagrams else ''}
-
-## Key Modules
-TODO: Generate key modules description using LLM with context
-
-## Getting Started
-TODO: Generate getting started instructions using LLM with context
-
-## Entry Points
-TODO: Generate entry points description using LLM with context
-
-## First Week Tasks
-TODO: Generate first week tasks using LLM with context
-
-## Glossary
-TODO: Generate glossary using LLM with context
-
----
-*Generated by CodeOnboard MCP Server*
-*Repository: {repo_url}*
-*Total Files Analyzed: {tech_stack.get('total_files', 0)}*
-*Has Tests: {'Yes' if tech_stack.get('has_tests') else 'No'}*
-*Has Docker: {'Yes' if tech_stack.get('has_docker') else 'No'}*
-*Has CI/CD: {'Yes' if tech_stack.get('has_ci') else 'No'}*
-*Architecture: {tech_stack.get('architecture', 'standard').title()}*
-"""
+        # Build prompt and generate guide with WatsonX
+        prompt = _build_guide_prompt(repo_name, effective_context, tech_stack)
+        guide_markdown = await _call_watsonx(prompt)
+        
+        # Check if WatsonX call failed, use fallback template
+        if guide_markdown.startswith("ERROR:"):
+            guide_markdown = _build_fallback_guide(repo_name, repo_url, tech_stack)
         
         sections = [
             "Project Overview",
