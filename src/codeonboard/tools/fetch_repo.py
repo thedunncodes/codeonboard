@@ -70,13 +70,17 @@ async def fetch_repo_tool(repo_url: str) -> dict:
             }
         
         # Not cached - fetch from GitHub
-        client = GitHubClient()
-        
-        # Fetch repository data (metadata is now included in repo_tree)
-        repo_tree = await client.fetch_repo(repo_url)
+        async with GitHubClient() as client:
+            # Fetch repository data (metadata is now included in repo_tree)
+            repo_tree = await client.fetch_repo(repo_url)
         
         # Get metadata from repo_tree
         metadata = repo_tree.metadata
+        if not metadata:
+            return {
+                "success": False,
+                "error": "Failed to fetch repository metadata"
+            }
         
         # Run analysis
         dependencies = detect_dependencies(repo_tree.files)

@@ -42,6 +42,26 @@ class GitHubClient:
             "X-GitHub-Api-Version": "2022-11-28",
         }
         self.base_url = "https://api.github.com"
+        self.client = httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=60.0,
+            limits=httpx.Limits(
+                max_connections=20,
+                max_keepalive_connections=10
+            )
+        )
+    
+    async def close(self):
+        """Close the HTTP client."""
+        await self.client.aclose()
+    
+    async def __aenter__(self):
+        """Async context manager entry."""
+        return self
+    
+    async def __aexit__(self, *args):
+        """Async context manager exit."""
+        await self.close()
     
     def _parse_github_url(self, github_url: str) -> tuple[str, str]:
         """
@@ -96,46 +116,45 @@ class GitHubClient:
         """
         url = f"{self.base_url}/repos/{owner}/{repo}"
         
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.get(url, headers=self.headers, timeout=30.0)
-                response.raise_for_status()
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 401:
-                    raise ValueError(
-                        "Invalid GitHub token. Please check your GITHUB_TOKEN."
-                    ) from e
-                elif e.response.status_code == 404:
-                    raise ValueError(
-                        f"Repository not found: {owner}/{repo}. "
-                        "Please check the URL or ensure the repository is public."
-                    ) from e
-                elif e.response.status_code in (403, 429):
-                    reset_time = e.response.headers.get("X-RateLimit-Reset", "unknown")
-                    raise ValueError(
-                        f"GitHub API rate limit exceeded. "
-                        f"Rate limit resets at: {reset_time}. "
-                        "Please wait before retrying."
-                    ) from e
-                else:
-                    raise ValueError(
-                        f"Failed to fetch repository metadata: {e.response.status_code} - {e.response.text}"
-                    ) from e
-            
-            data = response.json()
-            
-            return RepoMetadata(
-                name=data["name"],
-                description=data.get("description"),
-                stars=data.get("stargazers_count", 0),
-                forks=data.get("forks_count", 0),
-                language=data.get("language"),
-                topics=data.get("topics", []),
-                clone_url=data["clone_url"],
-                default_branch=data["default_branch"],
-                created_at=datetime.fromisoformat(data["created_at"].replace("Z", "+00:00")),
-                updated_at=datetime.fromisoformat(data["updated_at"].replace("Z", "+00:00")),
-            )
+        try:
+            response = await self.client.get(url, headers=self.headers)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 401:
+                raise ValueError(
+                    "Invalid GitHub token. Please check your GITHUB_TOKEN."
+                ) from e
+            elif e.response.status_code == 404:
+                raise ValueError(
+                    f"Repository not found: {owner}/{repo}. "
+                    "Please check the URL or ensure the repository is public."
+                ) from e
+            elif e.response.status_code in (403, 429):
+                reset_time = e.response.headers.get("X-RateLimit-Reset", "unknown")
+                raise ValueError(
+                    f"GitHub API rate limit exceeded. "
+                    f"Rate limit resets at: {reset_time}. "
+                    "Please wait before retrying."
+                ) from e
+            else:
+                raise ValueError(
+                    f"Failed to fetch repository metadata: {e.response.status_code} - {e.response.text}"
+                ) from e
+        
+        data = response.json()
+        
+        return RepoMetadata(
+            name=data["name"],
+            description=data.get("description"),
+            stars=data.get("stargazers_count", 0),
+            forks=data.get("forks_count", 0),
+            language=data.get("language"),
+            topics=data.get("topics", []),
+            clone_url=data["clone_url"],
+            default_branch=data["default_branch"],
+            created_at=datetime.fromisoformat(data["created_at"].replace("Z", "+00:00")),
+            updated_at=datetime.fromisoformat(data["updated_at"].replace("Z", "+00:00")),
+        )
     
     async def get_file_tree(self, owner: str, repo: str, branch: str) -> list[dict]:
         """
@@ -154,24 +173,23 @@ class GitHubClient:
         """
         tree_url = f"{self.base_url}/repos/{owner}/{repo}/git/trees/{branch}?recursive=1"
         
-        async with httpx.AsyncClient() as client:
-            try:
-                tree_response = await client.get(tree_url, headers=self.headers, timeout=30.0)
-                tree_response.raise_for_status()
-                
-                tree_data = tree_response.json()
-                return tree_data.get("tree", [])
+        try:
+            tree_response = await self.client.get(tree_url, headers=self.headers)
+            tree_response.raise_for_status()
             
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code in (403, 429):
-                    reset_time = e.response.headers.get("X-RateLimit-Reset", "unknown")
-                    raise ValueError(
-                        f"GitHub API rate limit exceeded. Rate limit resets at: {reset_time}"
-                    ) from e
-                else:
-                    raise ValueError(
-                        f"Failed to fetch file tree: {e.response.status_code}"
-                    ) from e
+            tree_data = tree_response.json()
+            return tree_data.get("tree", [])
+        
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code in (403, 429):
+                reset_time = e.response.headers.get("X-RateLimit-Reset", "unknown")
+                raise ValueError(
+                    f"GitHub API rate limit exceeded. Rate limit resets at: {reset_time}"
+                ) from e
+            else:
+                raise ValueError(
+                    f"Failed to fetch file tree: {e.response.status_code}"
+                ) from e
     
     async def get_file_content(self, owner: str, repo: str, path: str) -> Optional[str]:
         """
@@ -190,28 +208,27 @@ class GitHubClient:
         
         url = f"{self.base_url}/repos/{owner}/{repo}/contents/{path}"
         
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.get(url, headers=self.headers, timeout=30.0)
-                response.raise_for_status()
-                
-                data = response.json()
-                
-                # Decode base64 content
-                if "content" in data and data.get("encoding") == "base64":
-                    content = base64.b64decode(data["content"]).decode("utf-8", errors="ignore")
-                    
-                    # Truncate if too long
-                    if len(content) > MAX_FILE_SIZE:
-                        content = content[:MAX_FILE_SIZE] + "\n\n[truncated]"
-                    
-                    return content
-                
-                return None
+        try:
+            response = await self.client.get(url, headers=self.headers)
+            response.raise_for_status()
             
-            except (httpx.HTTPStatusError, UnicodeDecodeError, KeyError):
-                # Skip files that can't be fetched or decoded
-                return None
+            data = response.json()
+            
+            # Decode base64 content
+            if "content" in data and data.get("encoding") == "base64":
+                content = base64.b64decode(data["content"]).decode("utf-8", errors="ignore")
+                
+                # Truncate if too long
+                if len(content) > MAX_FILE_SIZE:
+                    content = content[:MAX_FILE_SIZE] + "\n\n[truncated]"
+                
+                return content
+            
+            return None
+        
+        except (httpx.HTTPStatusError, UnicodeDecodeError, KeyError):
+            # Skip files that can't be fetched or decoded
+            return None
     
     async def fetch_repo(self, github_url: str) -> RepoTree:
         """

@@ -54,8 +54,8 @@ class ContextStore:
             tech_stack: Tech stack analysis dictionary
         """
         try:
-            # Serialize repo_tree to dict
-            context_dict = repo_tree.model_dump()
+            # Serialize repo_tree to dict with datetime serialization
+            context_dict = repo_tree.model_dump(mode='json')
             context_json = json.dumps(context_dict)
             tech_stack_json = json.dumps(tech_stack)
             
