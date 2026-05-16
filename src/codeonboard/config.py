@@ -69,7 +69,7 @@ BINARY_EXTENSIONS = {
 }
 
 # WatsonX Model Configuration
-WATSONX_MODEL_ID = os.getenv("WATSONX_MODEL_ID", "ibm/granite-3-8b-instruct")
+WATSONX_MODEL_ID = os.getenv("WATSONX_MODEL_ID", "ibm/granite-8b-code-instruct")
 WATSONX_MAX_TOKENS = int(os.getenv("WATSONX_MAX_TOKENS", "2048"))
 WATSONX_TEMPERATURE = float(os.getenv("WATSONX_TEMPERATURE", "0.7"))
 WATSONX_TOP_P = float(os.getenv("WATSONX_TOP_P", "1.0"))
