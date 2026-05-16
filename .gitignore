@@ -157,6 +157,9 @@ ENV/
 env.bak/
 venv.bak/
 
+# Bob IDE config (machine-specific + potentially sensitive)
+.bob/
+
 # Spyder project settings
 .spyderproject
 .spyproject

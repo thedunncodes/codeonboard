@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "codeonboard": {
+      "command": "python",
+      "args": ["-m", "src.codeonboard.server"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "GITHUB_TOKEN": "${env:GITHUB_TOKEN}",
+        "WATSONX_API_KEY": "${env:WATSONX_API_KEY}",
+        "WATSONX_PROJECT_ID": "${env:WATSONX_PROJECT_ID}",
+        "WATSONX_URL": "${env:WATSONX_URL}"
+      }
+    }
+  }
+}
