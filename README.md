@@ -107,8 +107,7 @@ python run_server.py --http
 {
   "mcpServers": {
     "codeonboard-remote": {
-      "url": "https://your-app.onrender.com/mcp",
-      "transport": "streamable-http"
+      "url": "https://your-app.onrender.com/sse"
     }
   }
 }
