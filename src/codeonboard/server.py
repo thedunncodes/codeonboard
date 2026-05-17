@@ -98,7 +98,7 @@ def run_http(host: str = "0.0.0.0", port: int = 8000):
     import uvicorn
     from starlette.applications import Starlette
     from starlette.responses import JSONResponse
-    from starlette.routing import Route, Mount
+    from starlette.routing import Route
     from starlette.middleware import Middleware
     from starlette.middleware.cors import CORSMiddleware
 
@@ -108,26 +108,32 @@ def run_http(host: str = "0.0.0.0", port: int = 8000):
             "service": "CodeOnboard MCP Server",
             "version": MCP_SERVER_VERSION,
             "tools": ["fetch_repo", "generate_guide", "ask_codebase"],
-            "transport": "sse",
-            "mcp_endpoint": "/sse",
+            "transport": "streamable-http",
+            "mcp_endpoint": "/mcp",
             "docs": "https://github.com/thedunncodes/codeonboard"
         })
 
-    mcp_app = mcp.streamable_http_app()
-
     middleware = [
-        Middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+        Middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_methods=["*"],
+            allow_headers=["*"]
+        )
     ]
 
-    app = Starlette(
-        routes=[
-            Route("/health", health),
-            Mount("/", app=mcp_app),
-        ],
+    health_app = Starlette(
+        routes=[Route("/health", health)],
         middleware=middleware
     )
 
-    uvicorn.run(app, host=host, port=port)
+    async def combined_app(scope, receive, send):
+        if scope["type"] == "http" and scope["path"] == "/health":
+            await health_app(scope, receive, send)
+        else:
+            await mcp.streamable_http_app()(scope, receive, send)
+
+    uvicorn.run(combined_app, host=host, port=port)
 
 if __name__ == "__main__":
     import sys
