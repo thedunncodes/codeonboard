@@ -1,6 +1,6 @@
-# CodeOnboard
+# CodeOnboard MCP: Repo Onboarding Guide
 
-AI-powered developer onboarding that turns any GitHub repository into a comprehensive guide in seconds.
+CodeOnboard is an MCP server that turns any GitHub repository into into a comprehensive guide in seconds. It integrates with your IDE via the Model Context Protocol (MCP) to provide instant answers about your codebase, generate onboarding guides, and create visual architecture diagrams.
 
 ## What It Does
 
@@ -49,6 +49,20 @@ cp .env.example .env
 # Fill in your credentials in .env
 ```
 
+### Environment Variables
+
+Create a `.env` file with these values:
+
+```
+GITHUB_TOKEN=your_github_personal_access_token
+WATSONX_API_KEY=your_ibm_cloud_api_key
+WATSONX_PROJECT_ID=your_watsonx_project_id
+WATSONX_URL=https://us-south.ml.cloud.ibm.com
+WATSONX_MODEL_ID=meta-llama/llama-3-3-70b-instruct
+MCP_HOST=0.0.0.0
+MCP_PORT=8000
+```
+
 ### Connect to Bob IDE
 
 Add this to your Bob IDE MCP settings:
@@ -75,19 +89,44 @@ Add this to your Bob IDE MCP settings:
 
 - Make sure to replace the placeholder values with your actual credentials.
 
-### Environment Variables
+### Configure Onboard Mode (Optional but Recommended)
 
-Create a `.env` file with these values:
+The custom onboard mode makes CodeOnboard seamless — one sentence triggers 
+the full pipeline automatically.
 
+In Bob IDE, go to **Settings → Modes → New Mode** and fill in:
+
+**Slug:** `onboard`
+
+**Name:** `Onboard`
+
+**Description:** CodeOnboard specialist mode. Analyzes any GitHub repository using the CodeOnboard MCP tools to generate comprehensive developer onboarding guides. Automatically fetches repository context, generates AI-powered guides with architecture diagrams, setup instructions, and first-week tasks, then answers follow-up questions about the codebase.
+**Scope:** Global
+
+**Role definition:** 
 ```
-GITHUB_TOKEN=your_github_personal_access_token
-WATSONX_API_KEY=your_ibm_cloud_api_key
-WATSONX_PROJECT_ID=your_watsonx_project_id
-WATSONX_URL=https://us-south.ml.cloud.ibm.com
-WATSONX_MODEL_ID=meta-llama/llama-3-3-70b-instruct
-MCP_HOST=0.0.0.0
-MCP_PORT=8000
+You are CodeOnboard, an expert developer onboarding specialist. When asked to onboard onto a codebase or understand a repository:
+1. Always call fetch_repo first with the GitHub URL
+2. Then call generate_guide to produce the full onboarding guide
+3. Write the guide content to ONBOARDING.md in the current project
+4. Confirm what was generated and offer to answer questions using ask_codebase
 ```
+
+**When to use:** onboard, understand this repo, explain this codebase, new repo,
+generate guide, what does this project do
+**Allowed tools:**
+- ✅ Read files
+- ✅ Edit files  
+- ❌ Use browser
+- ❌ Execute commands
+- ✅ Switch modes
+- ✅ Use MCP tools
+
+
+**Set scope to Global** so the mode is available across all projects.
+
+Once configured, trigger it with:
+> *"Onboard me onto https://github.com/owner/repo"*
 
 ## Deployment
 
@@ -119,11 +158,16 @@ python run_server.py --http
 
 ## Demo
 
-Example Bob IDE prompts:
+Trigger CodeOnboard in Bob IDE using the Onboard mode (see setup above) 
+or any mode with these prompts:
 
 1. "Onboard me onto https://github.com/owner/repo"
-2. "Generate an onboarding guide for this repository"
+2. "Generate an onboarding guide for this repository"  
 3. "Where is authentication handled in this codebase?"
+4. "What are the entry points for this application?"
+
+> **Note:** The Onboard mode automates the full pipeline. Without it, 
+> you can still call each tool manually — Bob will use them when asked.
 
 ## Tech Stack
 
