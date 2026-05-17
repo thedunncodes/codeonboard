@@ -3,6 +3,7 @@ MCP tool for generating onboarding guides from repository analysis.
 """
 
 import asyncio
+from pathlib import Path
 from .fetch_repo import fetch_repo_tool
 from ..storage.context_store import ContextStore
 from ..utils.validators import validate_repo_url, parse_github_url
@@ -264,8 +265,20 @@ async def generate_guide_tool(repo_url: str, include_diagrams: bool = True) -> d
         guide_markdown = await _call_watsonx(prompt)
         
         # Check if WatsonX call failed, use fallback template
+        watsonx_error = None
         if guide_markdown.startswith("ERROR:"):
+            watsonx_error = guide_markdown
             guide_markdown = _build_fallback_guide(repo_name, repo_url, tech_stack)
+        
+        # Write guide to ONBOARDING.md in current working directory
+        output_file = None
+        try:
+            output_path = Path('ONBOARDING.md')
+            output_path.write_text(guide_markdown, encoding='utf-8')
+            output_file = str(output_path.absolute())
+        except Exception as e:
+            # Don't fail the entire operation if file write fails
+            output_file = f"Error writing file: {str(e)}"
         
         sections = [
             "Project Overview",
@@ -278,15 +291,22 @@ async def generate_guide_tool(repo_url: str, include_diagrams: bool = True) -> d
             "Glossary"
         ]
         
-        return {
+        result = {
             "success": True,
             "repo_key": repo_key,
             "guide_markdown": guide_markdown,
             "sections": sections,
             "tech_stack": tech_stack,
             "used_watsonx": used_watsonx,
+            "output_file": output_file,
             "message": f"Guide generated successfully{' (using WatsonX summarizer for large context)' if used_watsonx else ''}"
         }
+        
+        # Include error message if WatsonX failed
+        if watsonx_error:
+            result["watsonx_error"] = watsonx_error
+        
+        return result
     
     except Exception as e:
         return {
