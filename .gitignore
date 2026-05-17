@@ -167,6 +167,7 @@ venv.bak/
 .bob/*.local.*
 data/
 misc/
+ONBOARDING.md
 
 # Spyder project settings
 .spyderproject
