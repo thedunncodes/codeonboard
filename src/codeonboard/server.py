@@ -93,9 +93,48 @@ def run():
     """
     mcp.run(transport="stdio")
 
+def run_http(host: str = "0.0.0.0", port: int = 8000):
+    """Run the MCP server with SSE transport for remote deployment."""
+    import uvicorn
+    from starlette.applications import Starlette
+    from starlette.responses import JSONResponse
+    from starlette.routing import Route, Mount
+    from starlette.middleware import Middleware
+    from starlette.middleware.cors import CORSMiddleware
+
+    async def health(request):
+        return JSONResponse({
+            "status": "ok",
+            "service": "CodeOnboard MCP Server",
+            "version": MCP_SERVER_VERSION,
+            "tools": ["fetch_repo", "generate_guide", "ask_codebase"],
+            "transport": "sse",
+            "mcp_endpoint": "/sse",
+            "docs": "https://github.com/thedunncodes/codeonboard"
+        })
+
+    mcp_app = mcp.streamable_http_app()
+
+    middleware = [
+        Middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+    ]
+
+    app = Starlette(
+        routes=[
+            Route("/health", health),
+            Mount("/", app=mcp_app),
+        ],
+        middleware=middleware
+    )
+
+    uvicorn.run(app, host=host, port=port)
 
 if __name__ == "__main__":
-    run()
+    import sys
+    if "--http" in sys.argv:
+        run_http()
+    else:
+        run() # Default to stdio for local Bob IDE
 
 
 __all__ = ["mcp", "run"]
