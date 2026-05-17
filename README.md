@@ -106,8 +106,9 @@ python run_server.py --http
 ```json
 {
   "mcpServers": {
-    "codeonboard": {
-      "url": "https://your-deployment.onrender.com/sse"
+    "codeonboard-remote": {
+      "url": "https://your-app.onrender.com/mcp",
+      "transport": "streamable-http"
     }
   }
 }
