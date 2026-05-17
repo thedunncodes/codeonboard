@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: codeonboard
+    env: python
+    pythonVersion: "3.13"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python run_server.py --http
+    healthCheckPath: /health
+    envVars:
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: WATSONX_API_KEY
+        sync: false
+      - key: WATSONX_PROJECT_ID
+        sync: false
+      - key: WATSONX_URL
+        value: https://us-south.ml.cloud.ibm.com
+      - key: WATSONX_MODEL_ID
+        value: meta-llama/llama-3-3-70b-instruct
+      - key: MCP_HOST
+        value: 0.0.0.0
+      - key: MCP_PORT
+        value: 8000
