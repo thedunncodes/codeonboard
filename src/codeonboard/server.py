@@ -96,9 +96,9 @@ def run():
 def run_http(host: str = "0.0.0.0", port: int = 8000):
     """Run the MCP server with SSE transport for remote deployment."""
     import uvicorn
-    from starlette.applications import Starlette
     from starlette.responses import JSONResponse
     from starlette.routing import Route
+    from starlette.applications import Starlette
     from starlette.middleware import Middleware
     from starlette.middleware.cors import CORSMiddleware
 
@@ -108,33 +108,22 @@ def run_http(host: str = "0.0.0.0", port: int = 8000):
             "service": "CodeOnboard MCP Server",
             "version": MCP_SERVER_VERSION,
             "tools": ["fetch_repo", "generate_guide", "ask_codebase"],
-            "transport": "streamable-http",
-            "mcp_endpoint": "/mcp",
+            "transport": "sse",
+            "mcp_endpoint": "/sse",
             "docs": "https://github.com/thedunncodes/codeonboard"
         })
 
-    middleware = [
-        Middleware(
-            CORSMiddleware,
-            allow_origins=["*"],
-            allow_methods=["*"],
-            allow_headers=["*"]
-        )
-    ]
-
-    health_app = Starlette(
-        routes=[Route("/health", health)],
-        middleware=middleware
-    )
+    # Use SSE transport instead of streamable-http
+    sse_app = mcp.sse_app()
 
     async def combined_app(scope, receive, send):
         if scope["type"] == "http" and scope["path"] == "/health":
-            await health_app(scope, receive, send)
+            health_starlette = Starlette(routes=[Route("/health", health)])
+            await health_starlette(scope, receive, send)
         else:
-            await mcp.streamable_http_app()(scope, receive, send)
+            await sse_app(scope, receive, send)
 
     uvicorn.run(combined_app, host=host, port=port)
-
 if __name__ == "__main__":
     import sys
     if "--http" in sys.argv:
