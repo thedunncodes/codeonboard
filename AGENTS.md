@@ -27,7 +27,7 @@ Required:
 
 Optional (graceful degradation):
 - `WATSONX_API_KEY`, `WATSONX_PROJECT_ID`, `WATSONX_URL`
-- `WATSONX_MODEL_ID` (default: "ibm/granite-3-8b-instruct")
+- `WATSONX_MODEL_ID` (default: "meta-llama/llama-3-3-70b-instruct")
 - `WATSONX_MAX_TOKENS` (default: 2048)
 
 ## Code Style
